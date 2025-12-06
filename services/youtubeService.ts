@@ -1,4 +1,7 @@
+import { GoogleGenAI } from "@google/genai";
 import type { TranscriptItem } from '../types';
+
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 export const parseYouTubeUrl = (url: string): string | null => {
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -10,27 +13,45 @@ export const parseYouTubeUrl = (url: string): string | null => {
   }
 };
 
-export const getDemoData = (videoId: string): { title: string; insights: string[]; transcript: TranscriptItem[] } => {
-  return {
-    title: `Understanding Quantum Computing`,
-    insights: [
-      'Quantum computing utilizes principles of quantum mechanics like superposition and entanglement to process information.',
-      'Qubits, unlike classical bits, can represent both 0 and 1 simultaneously, enabling massive parallel computation.',
-      'Key potential applications include drug discovery, materials science, financial modeling, and breaking complex cryptographic codes.',
-      'Major challenges remain in building stable, error-corrected quantum computers, a field known as quantum error correction.',
-      'While still in its infancy, quantum computing promises to revolutionize industries by solving problems currently intractable for even the most powerful supercomputers.'
-    ],
-    transcript: [
-      { timestamp: '00:05', text: "Hello and welcome. Today, we're diving into the fascinating world of quantum computing." },
-      { timestamp: '00:18', text: "Unlike classical computers that use bits, which can be either a 0 or a 1, quantum computers use qubits." },
-      { timestamp: '00:32', text: "A qubit can exist in a superposition of both states at once. Think of it like a spinning coin before it lands." },
-      { timestamp: '00:45', text: "This property allows quantum computers to perform many calculations simultaneously." },
-      { timestamp: '01:02', text: "Another key concept is entanglement, where two qubits become linked in a way that their fates are intertwined, no matter the distance between them." },
-      { timestamp: '01:20', text: "Einstein famously called this 'spooky action at a distance'." },
-      { timestamp: '01:35', text: "So, what are the real-world applications? Imagine designing new molecules for medicine..." },
-      { timestamp: '01:51', text: "...or creating new materials with incredible properties. The possibilities are truly mind-boggling." },
-      { timestamp: '02:10', text: "However, building these machines is incredibly difficult. Qubits are fragile and sensitive to their environment." },
-      { timestamp: '02:25', text: "This 'decoherence' causes errors in computation, which is a major hurdle for scientists to overcome." }
+export const generateVideoInsights = async (videoId: string): Promise<{ title: string; insights: string[]; transcript: TranscriptItem[] }> => {
+  const prompt = `Analyze the YouTube video with ID: ${videoId}. URL: https://www.youtube.com/watch?v=${videoId}.
+  
+  Perform a Google Search to find the video title, a summary of its content, and a transcript or key dialogue segments.
+  
+  Return a JSON object (and ONLY a JSON object) with this specific structure:
+  {
+    "title": "The exact title of the video",
+    "insights": ["Key insight 1", "Key insight 2", "Key insight 3", "Key insight 4", "Key insight 5"],
+    "transcript": [
+      { "timestamp": "MM:SS", "text": "spoken text..." }
     ]
-  };
+  }
+
+  Ensure the transcript has at least 5-10 entries. If an exact transcript is not available, generate a detailed summary in transcript format with estimated timestamps based on the video length and content found.
+  Do not include markdown formatting (like \`\`\`json).`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        // Note: responseMimeType: 'application/json' is not supported with googleSearch
+      }
+    });
+
+    const text = response.text || "{}";
+    // Clean up potential markdown code blocks
+    const cleanText = text.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
+    const data = JSON.parse(cleanText);
+
+    return {
+      title: data.title || "Unknown Title",
+      insights: data.insights || [],
+      transcript: data.transcript || []
+    };
+  } catch (error) {
+    console.error("Error generating insights:", error);
+    throw new Error("Failed to generate insights. Please try again.");
+  }
 };

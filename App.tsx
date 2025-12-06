@@ -3,7 +3,7 @@ import { Sidebar } from './components/Sidebar';
 import { HomePage } from './components/HomePage';
 import { VideoPage } from './components/VideoPage';
 import type { VideoData } from './types';
-import { parseYouTubeUrl, getDemoData } from './services/youtubeService';
+import { parseYouTubeUrl, generateVideoInsights } from './services/youtubeService';
 
 export default function App() {
   const [history, setHistory] = useState<VideoData[]>([]);
@@ -46,21 +46,28 @@ export default function App() {
     };
     setHistory(prev => [tempVideoData, ...prev]);
 
-    // Simulate fetching data
-    setTimeout(() => {
-      const demoData = getDemoData(videoId);
+    try {
+      const data = await generateVideoInsights(videoId);
+      
       const newVideoData: VideoData = {
         id: videoId,
-        title: demoData.title,
-        insights: demoData.insights,
-        transcript: demoData.transcript,
+        title: data.title,
+        insights: data.insights,
+        transcript: data.transcript,
       };
 
       setHistory(prev => 
         prev.map(video => video.id === videoId ? newVideoData : video)
       );
+    } catch (err) {
+      console.error(err);
+      setError("Failed to generate insights. The AI could not process this video.");
+      // Remove the temp entry if it failed
+      setHistory(prev => prev.filter(video => video.id !== videoId));
+      setCurrentVideoId(null);
+    } finally {
       setIsLoading(false);
-    }, 2500); // 2.5 second delay to simulate loading
+    }
   }, [history]);
   
   const handleGoHome = useCallback(() => {
